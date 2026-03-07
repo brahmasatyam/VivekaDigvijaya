@@ -1,0 +1,47 @@
+[
+  {
+    "id": "p1",
+    "name": "Early Life & Indian Wandering",
+    "years": "1863–1893",
+    "color": "#F39C12",
+    "colorDark": "#d68910",
+    "description": "Born in Kolkata, spiritual awakening under Sri Ramakrishna, and six years of wandering as a parivrajaka (wandering monk) across the length and breadth of India — discovering the land, its people, and crystallising his vision for India's spiritual renaissance.",
+    "icon": "🇮🇳"
+  },
+  {
+    "id": "p2",
+    "name": "First Western Tour & Parliament of Religions",
+    "years": "1893–1897",
+    "color": "#3498DB",
+    "colorDark": "#2471a3",
+    "description": "Vivekananda's historic journey to the West — through Ceylon, Malaysia, Singapore, China, Japan and Canada — culminating in his electrifying speech at the Parliament of World's Religions in Chicago on 11 September 1893. He spent nearly four years spreading Vedanta across the USA and England.",
+    "icon": "🌍"
+  },
+  {
+    "id": "p3",
+    "name": "Return to India & Mission Building",
+    "years": "1897–1899",
+    "color": "#2ECC71",
+    "colorDark": "#1e8449",
+    "description": "Triumphant return to India greeted by massive crowds. Founded the Ramakrishna Mission (1897) and Belur Math. Travelled across India to inaugurate centres, deliver lectures, and inspire a generation. Also visited Himalayas for spiritual retreat.",
+    "icon": "🏛️"
+  },
+  {
+    "id": "p4",
+    "name": "Second Western Tour",
+    "years": "1899–1900",
+    "color": "#9B59B6",
+    "colorDark": "#76448a",
+    "description": "Second visit to the West — USA, England, France (Congress of Religions, 1900) and Egypt — despite deteriorating health. Established Vedanta Society of San Francisco and deepened contacts in Paris before returning via Cairo.",
+    "icon": "✈️"
+  },
+  {
+    "id": "p5",
+    "name": "Final Years in India",
+    "years": "1900–1902",
+    "color": "#E74C3C",
+    "colorDark": "#c0392b",
+    "description": "Returned to Belur Math for his final years. Made last pilgrimage tours to Varanasi, Bodh Gaya and other sacred sites. Attained Mahasamadhi on 4 July 1902 at Belur Math at age 39.",
+    "icon": "🙏"
+  }
+]
