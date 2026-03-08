@@ -13,12 +13,80 @@ let entities = {};             // loc.id → Cesium entity
 let activePhases = new Set();  // which phases are visible
 let routePolylines = {};       // phase-id → polyline entity
 let selectedEntity = null;
+let currentLocIndex = -1;      // index in LOCATIONS of the selected location
+let isPlaying = false;
+let playTimer = null;
+let timelineYear = 1902;       // show locations up to this year (1902 = all)
+let sidebarCollapsed = false;
 
-// ── Bootstrap ──────────────────────────────────────────────────────────────
+// ── Phase-specific quotes ──────────────────────────────────────────────────
+const PHASE_QUOTES = {
+  p1: [
+    "Take up one idea. Make that one idea your life — think of it, dream of it, live on that idea.",
+    "You cannot believe in God until you believe in yourself.",
+    "The greatest sin is to think yourself weak.",
+    "In a day when you don't come across any problems, you can be sure that you are travelling in a wrong path.",
+    "The fire that warms us can also consume us; it is not the fault of the fire.",
+  ],
+  p2: [
+    "Sisters and Brothers of America — It fills my heart with joy unspeakable to rise in response to the warm and cordial welcome which you have given us.",
+    "Each soul is potentially divine. The goal is to manifest this Divinity within.",
+    "All the powers in the universe are already ours. It is we who have put our hands before our eyes and cry that it is dark.",
+    "The moment I have realized God sitting in the temple of every human body — that moment I am free from bondage.",
+    "It is our own mental attitude which makes the world what it is for us.",
+  ],
+  p3: [
+    "Arise, awake and stop not till the goal is reached.",
+    "Strength is life, weakness is death.",
+    "The world is the great gymnasium where we come to make ourselves strong.",
+    "See God in every person, place, and thing, and all will be well in your world.",
+    "We are what our thoughts have made us; so take care about what you think.",
+  ],
+  p4: [
+    "Do not wait for anybody or anything. Do whatever you can, build your hope on none.",
+    "They alone live who live for others. The rest are more dead than alive.",
+    "Whatever you think that you will be. If you think yourself weak, weak you will be; if you think yourself strong, strong you will be.",
+    "That man has reached immortality who is disturbed by nothing material.",
+    "Truth can be stated in a thousand different ways, yet each one can be true.",
+  ],
+  p5: [
+    "My India, arise! Where is your vital force? In your Immortal Soul.",
+    "Education is the manifestation of the perfection already in man.",
+    "Purity, patience, and perseverance are the three essentials to success and, above all, love.",
+    "Talk to yourself at least once in a day. Otherwise you may miss a meeting with an excellent person in this world.",
+    "The secret of life is not enjoyment but education through experience.",
+  ]
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function extractYear(dateStr) {
+  if (!dateStr) return null;
+  const m = dateStr.match(/\b(1[89]\d\d)\b/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function getPhaseQuote(phaseId) {
+  const pool = PHASE_QUOTES[phaseId] || PHASE_QUOTES.p1;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function wikiSearchUrl(loc) {
+  const q = loc.name || loc.city;
+  return `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`;
+}
+
+// Returns LOCATIONS filtered by activePhases and timelineYear (in original order)
+function getFilteredLocations() {
+  return LOCATIONS.filter(loc => {
+    if (!activePhases.has(loc.phase)) return false;
+    const yr = extractYear(loc.date);
+    if (yr !== null && yr > timelineYear) return false;
+    return true;
+  });
+}
+
+// ── Data loading ────────────────────────────────────────────────────────────
 async function loadData() {
-  // Use embedded data (window.PHASES_DATA / window.LOCATIONS_DATA / window.PIN_CONTENT_DATA)
-  // when the app is opened directly as a file:// URL (no web server).
-  // Fall back to fetch() when served from a proper HTTP server.
   if (window.PHASES_DATA && window.LOCATIONS_DATA) {
     PHASES = window.PHASES_DATA;
     LOCATIONS = window.LOCATIONS_DATA;
@@ -27,7 +95,6 @@ async function loadData() {
     }
     return;
   }
-  // Fetch fallback (requires a web server)
   const [phData, locData, pcData] = await Promise.all([
     fetch('data/phases.json').then(r => r.json()),
     fetch('data/locations.json').then(r => r.json()),
@@ -45,6 +112,8 @@ async function init() {
     await initCesium();
     buildTimeline();
     setupSearch();
+    setupTimeline();
+    setupKeyboard();
     document.getElementById('loading-overlay').style.display = 'none';
   } catch (err) {
     console.error('Init error:', err);
@@ -52,12 +121,11 @@ async function init() {
   }
 }
 
-// ── Legend ─────────────────────────────────────────────────────────────────
+// ── Legend ──────────────────────────────────────────────────────────────────
 function buildLegend() {
   const legend = document.getElementById('phase-legend');
   legend.innerHTML = '';
 
-  // "All" toggle
   const allBtn = document.createElement('div');
   allBtn.className = 'phase-item all-phases active';
   allBtn.innerHTML = `<span class="phase-dot" style="background:#f0c040"></span><span class="phase-label">All Phases</span>`;
@@ -118,45 +186,37 @@ function darkenHex(hex, t) {
   return `#${[r,g,b].map(v=>d(v).toString(16).padStart(2,'0')).join('')}`;
 }
 
-// Draws a teardrop map-pin onto an off-screen canvas and returns the canvas.
-// displaySize = the pixel width Cesium will render the billboard at.
-// The canvas is created at 2× for crispness on HiDPI screens.
 function buildPinCanvas(color, displaySize) {
   const dpr = 2;
-  const pw  = displaySize * dpr;           // canvas width in physical px
-  const pad = 4 * dpr;                     // padding around shape
-  const r   = pw / 2 - pad;               // circle radius
-  const cx  = pw / 2;                      // horizontal centre
-  const cy  = r + pad;                     // circle centre Y
-  const dist = r * 1.55;                   // distance from circle centre to pin tip
-  const pointY = cy + dist;               // Y coordinate of pin tip
-  const ph  = Math.ceil(pointY + pad);    // canvas height
+  const pw  = displaySize * dpr;
+  const pad = 4 * dpr;
+  const r   = pw / 2 - pad;
+  const cx  = pw / 2;
+  const cy  = r + pad;
+  const dist = r * 1.55;
+  const pointY = cy + dist;
+  const ph  = Math.ceil(pointY + pad);
 
   const canvas = document.createElement('canvas');
   canvas.width  = pw;
   canvas.height = ph;
   const ctx = canvas.getContext('2d');
 
-  // ── compute tangent angles so sides meet the circle cleanly ──────────────
   const halfAngle = Math.asin(r / dist);
-  const startA    = Math.PI / 2 + halfAngle;   // lower-left tangent on circle
-  const endA      = Math.PI / 2 - halfAngle;   // lower-right tangent on circle
+  const startA    = Math.PI / 2 + halfAngle;
+  const endA      = Math.PI / 2 - halfAngle;
 
-  // ── drop shadow (drawn before fill so it sits under the shape) ───────────
   ctx.shadowColor   = 'rgba(0,0,0,0.52)';
   ctx.shadowBlur    = 7 * dpr;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 2.5 * dpr;
 
-  // ── pin body path ──
   ctx.beginPath();
   ctx.moveTo(cx, pointY);
-  // arc clockwise from lower-left tangent, over the top, to lower-right tangent
   ctx.arc(cx, cy, r, startA, endA, false);
-  ctx.closePath();   // line from right tangent back to pointY
+  ctx.closePath();
 
-  // ── radial gradient fill ──────────────────────────────────────────────────
-  const gx = cx - r * 0.3, gy = cy - r * 0.3;   // highlight offset (upper-left)
+  const gx = cx - r * 0.3, gy = cy - r * 0.3;
   const grad = ctx.createRadialGradient(gx, gy, r * 0.05, cx, cy, r * 1.2);
   grad.addColorStop(0,   lightenHex(color, 0.6));
   grad.addColorStop(0.55, color);
@@ -164,13 +224,11 @@ function buildPinCanvas(color, displaySize) {
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // ── white border (disable shadow first) ──────────────────────────────────
   ctx.shadowColor = 'transparent';
   ctx.strokeStyle = 'rgba(255,255,255,0.88)';
   ctx.lineWidth   = 2 * dpr;
   ctx.stroke();
 
-  // ── inner white circle ────────────────────────────────────────────────────
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.30, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
@@ -179,7 +237,7 @@ function buildPinCanvas(color, displaySize) {
   return canvas;
 }
 
-// ── Cesium ─────────────────────────────────────────────────────────────────
+// ── Cesium ──────────────────────────────────────────────────────────────────
 async function initCesium() {
   Cesium.Ion.defaultAccessToken = '';
 
@@ -208,33 +266,41 @@ async function initCesium() {
     })
   });
 
-  // ── Satellite imagery (ArcGIS — no token) ──────────────────────────────
+  // ── Satellite imagery ────────────────────────────────────────────────────
   viewer.imageryLayers.removeAll();
   const sat = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
     'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
   );
   viewer.imageryLayers.addImageryProvider(sat);
 
-  // Labels layer on top
   const labels = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
     'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer'
   );
   const labLayer = viewer.imageryLayers.addImageryProvider(labels);
   labLayer.alpha = 0.7;
 
-  // ── Camera ──────────────────────────────────────────────────────────────
+  // ── Day / night sun lighting ─────────────────────────────────────────────
+  viewer.scene.globe.enableLighting = true;
+  // Fix clock to a realistic daytime so India is illuminated
+  viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date('2024-01-15T06:00:00Z'));
+  viewer.clock.shouldAnimate = false;
+
+  // ── Camera ────────────────────────────────────────────────────────────────
   viewer.camera.flyTo({
     destination: Cesium.Cartesian3.fromDegrees(78.0, 22.0, 14000000),
     duration: 0
   });
 
-  // ── Build pin images (custom canvas — gradient + shadow) ────────────────
+  // ── Build pin images ──────────────────────────────────────────────────────
   PHASES.forEach(p => {
     pinImages[p.id]        = buildPinCanvas(p.color, 36).toDataURL();
     pinImages[p.id + '_ks']= buildPinCanvas(p.color, 46).toDataURL();
   });
+  // Selected-state pins: white body so they stand out from every phase colour
+  pinImages['selected_sm'] = buildPinCanvas('#ffffff', 44).toDataURL();
+  pinImages['selected_lg'] = buildPinCanvas('#ffffff', 56).toDataURL();
 
-  // ── Add location entities ───────────────────────────────────────────────
+  // ── Add location entities ─────────────────────────────────────────────────
   LOCATIONS.forEach(loc => {
     const phase = PHASES.find(p => p.id === loc.phase);
     const color = phase ? phase.color : '#f0c040';
@@ -247,14 +313,10 @@ async function initCesium() {
         image: isKeystone
           ? (pinImages[loc.phase + '_ks'] || pinImages[loc.phase])
           : (pinImages[loc.phase]          || pinImages[PHASES[0].id]),
-        // width : display size; height preserves the pin's natural aspect ratio
-        // (circle radius + 1.55×radius point distance + padding → ~1.75× width)
         width:  isKeystone ? 46 : 36,
         height: isKeystone ? 80 : 63,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-        // No disableDepthTestDistance — let the globe's depth buffer occlude
-        // pins that are on the far side of the Earth when rotated away.
         scaleByDistance: new Cesium.NearFarScalar(2e6, 1.0, 1e7, 0.55)
       },
       label: {
@@ -268,7 +330,7 @@ async function initCesium() {
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         translucencyByDistance: new Cesium.NearFarScalar(1.5e6, 1.0, 8e6, 0.0),
-        show: false  // shown only on hover
+        show: false
       },
       _locData: loc
     });
@@ -276,35 +338,9 @@ async function initCesium() {
     entities[loc.id] = entity;
   });
 
-  // ── Route polylines per phase ───────────────────────────────────────────
-  PHASES.forEach(phase => {
-    const phaseLocs = LOCATIONS.filter(l => l.phase === phase.id);
-    if (phaseLocs.length < 2) return;
-
-    const positions = phaseLocs.map(l => Cesium.Cartesian3.fromDegrees(l.lng, l.lat));
-    const pl = viewer.entities.add({
-      id: `route_${phase.id}`,
-      polyline: {
-        positions,
-        width: 2,
-        material: new Cesium.PolylineDashMaterialProperty({
-          color: Cesium.Color.fromCssColorString(phase.color).withAlpha(0.6),
-          dashLength: 20,
-          dashPattern: 255
-        }),
-        clampToGround: true,
-        arcType: Cesium.ArcType.GEODESIC
-      }
-    });
-    routePolylines[phase.id] = pl;
-  });
-
-  // ── Interaction ─────────────────────────────────────────────────────────
+  // ── Interaction ───────────────────────────────────────────────────────────
   const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
-  // Track whether the user is currently dragging (rotating the globe).
-  // While dragging we suppress hover-label behaviour and hide all labels
-  // so pins don't "stick" visible after the cursor swept across them.
   let isRotating = false;
   let mouseDownOnPin = false;
 
@@ -313,10 +349,9 @@ async function initCesium() {
   }
 
   handler.setInputAction(movement => {
-    // Record whether the press started on a pin (so a click still works)
     const picked = viewer.scene.pick(movement.position);
     mouseDownOnPin = Cesium.defined(picked) && picked.id && picked.id._locData;
-    isRotating = false;           // reset — might become a drag
+    isRotating = false;
   }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
 
   handler.setInputAction(() => {
@@ -325,37 +360,30 @@ async function initCesium() {
     mouseDownOnPin = false;
   }, Cesium.ScreenSpaceEventType.LEFT_UP);
 
-  // Click → show info panel
   handler.setInputAction(movement => {
-    if (isRotating) return;       // ignore synthetic click after a drag
+    if (isRotating) return;
     const picked = viewer.scene.pick(movement.position);
     if (Cesium.defined(picked) && picked.id && picked.id._locData) {
       showInfoPanel(picked.id._locData);
-      if (selectedEntity) selectedEntity.billboard.scale = 1.0;
+      deselectPin(selectedEntity);
       selectedEntity = picked.id;
-      selectedEntity.billboard.scale = 1.35;
+      selectPin(selectedEntity);
     } else {
       closeInfoPanel();
-      if (selectedEntity) selectedEntity.billboard.scale = 1.0;
+      deselectPin(selectedEntity);
       selectedEntity = null;
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-  // Hover → show label + cursor (suppressed while rotating)
   handler.setInputAction(movement => {
-    // If the left button is held and the cursor moved, this is a rotation drag
-    if (viewer.scene.canvas.matches(':active') ||
-        (window._cesiumLeftDown)) {
+    if (viewer.scene.canvas.matches(':active') || window._cesiumLeftDown) {
       isRotating = true;
     }
-
     if (isRotating) {
-      // Hide all labels and reset cursor during globe rotation
       clearAllLabels();
       viewer.scene.canvas.style.cursor = 'default';
       return;
     }
-
     const picked = viewer.scene.pick(movement.position);
     if (Cesium.defined(picked) && picked.id && picked.id._locData) {
       viewer.scene.canvas.style.cursor = 'pointer';
@@ -366,7 +394,6 @@ async function initCesium() {
     }
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
-  // Track left-button state for the drag detection above
   viewer.scene.canvas.addEventListener('mousedown', e => { if (e.button === 0) window._cesiumLeftDown = true; });
   viewer.scene.canvas.addEventListener('mouseup',   e => { if (e.button === 0) { window._cesiumLeftDown = false; isRotating = false; } });
   viewer.scene.canvas.addEventListener('mouseleave', () => { clearAllLabels(); viewer.scene.canvas.style.cursor = 'default'; });
@@ -374,11 +401,35 @@ async function initCesium() {
   setupZoomBar();
 }
 
-// ── Visibility ─────────────────────────────────────────────────────────────
+// ── Pin selection helpers ───────────────────────────────────────────────────
+function selectPin(entity) {
+  if (!entity) return;
+  const loc = entity._locData;
+  const big = loc && loc.significance && loc.significance.includes('—');
+  entity.billboard.image = big ? pinImages['selected_lg'] : pinImages['selected_sm'];
+  entity.billboard.scale = 1.6;
+}
+
+function deselectPin(entity) {
+  if (!entity) return;
+  const loc = entity._locData;
+  if (!loc) return;
+  const big = loc.significance && loc.significance.includes('—');
+  entity.billboard.image = big
+    ? (pinImages[loc.phase + '_ks'] || pinImages[loc.phase])
+    : (pinImages[loc.phase]          || pinImages[PHASES[0].id]);
+  entity.billboard.scale = 1.0;
+}
+
+// ── Visibility ──────────────────────────────────────────────────────────────
 function applyVisibility() {
   LOCATIONS.forEach(loc => {
     const ent = entities[loc.id];
-    if (ent) ent.show = activePhases.has(loc.phase);
+    if (!ent) return;
+    const phaseOn = activePhases.has(loc.phase);
+    const yr = extractYear(loc.date);
+    const yearOn = (yr === null) || (yr <= timelineYear);
+    ent.show = phaseOn && yearOn;
   });
   PHASES.forEach(p => {
     const pl = routePolylines[p.id];
@@ -386,23 +437,29 @@ function applyVisibility() {
   });
 }
 
-// ── Info Panel ─────────────────────────────────────────────────────────────
+// ── Info Panel ──────────────────────────────────────────────────────────────
 function showInfoPanel(loc) {
   const phase = PHASES.find(p => p.id === loc.phase);
   const panel = document.getElementById('info-panel');
   const color = phase ? phase.color : '#f0c040';
 
+  // Header
   document.getElementById('info-phase-badge').textContent = phase ? `${phase.icon || ''} ${phase.name}` : '';
   document.getElementById('info-phase-badge').style.background = color + '33';
   document.getElementById('info-phase-badge').style.borderColor = color;
   document.getElementById('info-phase-badge').style.color = color;
-
   document.getElementById('info-title').textContent = loc.name;
   document.getElementById('info-place').textContent = [loc.place, loc.city, loc.country].filter(Boolean).join(', ');
   document.getElementById('info-date').textContent = loc.date || '';
+
+  // Significance
   document.getElementById('info-sig').textContent = loc.significance || '';
 
-  // Use rich multi-paragraph content from pin_content.json if available
+  // Quote — random quote from this phase
+  const quoteEl = document.getElementById('info-quote-text');
+  if (quoteEl) quoteEl.textContent = getPhaseQuote(loc.phase);
+
+  // Rich description
   const descEl = document.getElementById('info-desc');
   const badgeEl = document.getElementById('info-rich-badge');
   const richContent = PIN_CONTENT[loc.id];
@@ -416,6 +473,39 @@ function showInfoPanel(loc) {
     if (badgeEl) badgeEl.style.display = 'none';
   }
 
+  // Wikipedia link
+  const wikiLink = document.getElementById('info-wiki-link');
+  if (wikiLink) {
+    wikiLink.href = wikiSearchUrl(loc);
+  }
+
+  // Location image
+  const imgWrap = document.getElementById('info-image-wrap');
+  const imgEl   = document.getElementById('info-image');
+  const imgCap  = document.getElementById('info-image-caption');
+  const rawImg  = loc.image || (PIN_CONTENT[loc.id] && PIN_CONTENT[loc.id].image) || null;
+  // Plain filenames resolve to data/images/; full URLs are used as-is
+  const imgSrc  = rawImg
+    ? (rawImg.startsWith('http://') || rawImg.startsWith('https://') || rawImg.startsWith('data:')
+        ? rawImg
+        : 'data/images/' + rawImg)
+    : null;
+  if (imgWrap && imgEl) {
+    if (imgSrc) {
+      imgEl.src = imgSrc;
+      imgEl.alt = loc.name;
+      imgEl.onerror = () => { imgWrap.style.display = 'none'; };
+      if (imgCap) imgCap.textContent = loc.city ? loc.name + ' · ' + loc.city : loc.name;
+      imgWrap.style.display = 'block';
+    } else {
+      imgWrap.style.display = 'none';
+    }
+  }
+
+  // Navigation counter
+  currentLocIndex = LOCATIONS.indexOf(loc);
+  updateNavCounter();
+
   panel.classList.add('open');
 
   // Fly to location
@@ -425,7 +515,7 @@ function showInfoPanel(loc) {
     easingFunction: Cesium.EasingFunction.CUBIC_OUT
   });
 
-  // Highlight marker in list
+  // Highlight in sidebar
   document.querySelectorAll('.loc-item').forEach(el => el.classList.remove('active'));
   const listItem = document.querySelector(`.loc-item[data-id="${loc.id}"]`);
   if (listItem) { listItem.classList.add('active'); listItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
@@ -436,13 +526,179 @@ function closeInfoPanel() {
   document.querySelectorAll('.loc-item').forEach(el => el.classList.remove('active'));
 }
 
-// ── Timeline / Location List ────────────────────────────────────────────────
+function updateNavCounter() {
+  const filtered = getFilteredLocations();
+  const pos = filtered.findIndex(l => l === LOCATIONS[currentLocIndex]);
+  const counter = document.getElementById('info-counter');
+  if (counter) {
+    counter.textContent = pos >= 0
+      ? `${pos + 1} / ${filtered.length}`
+      : `— / ${filtered.length}`;
+  }
+}
+
+// ── Prev / Next navigation ──────────────────────────────────────────────────
+function goPrev() {
+  const filtered = getFilteredLocations();
+  if (!filtered.length) return;
+  const pos = filtered.findIndex(l => l === LOCATIONS[currentLocIndex]);
+  const newIdx = pos <= 0 ? filtered.length - 1 : pos - 1;
+  const loc = filtered[newIdx];
+  deselectPin(selectedEntity);
+  selectedEntity = entities[loc.id] || null;
+  selectPin(selectedEntity);
+  showInfoPanel(loc);
+}
+
+function goNext() {
+  const filtered = getFilteredLocations();
+  if (!filtered.length) return;
+  const pos = filtered.findIndex(l => l === LOCATIONS[currentLocIndex]);
+  const newIdx = (pos < 0 || pos >= filtered.length - 1) ? 0 : pos + 1;
+  const loc = filtered[newIdx];
+  deselectPin(selectedEntity);
+  selectedEntity = entities[loc.id] || null;
+  selectPin(selectedEntity);
+  showInfoPanel(loc);
+}
+
+// ── Play Journey ────────────────────────────────────────────────────────────
+function startPlay() {
+  if (isPlaying) { stopPlay(); return; }
+  const filtered = getFilteredLocations();
+  if (!filtered.length) return;
+
+  isPlaying = true;
+  updatePlayButton();
+
+  // Start from current location or beginning
+  const pos = filtered.findIndex(l => l === LOCATIONS[currentLocIndex]);
+  const startIdx = pos >= 0 ? pos : 0;
+  playStep(startIdx, filtered);
+}
+
+function stopPlay() {
+  isPlaying = false;
+  if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+  updatePlayButton();
+}
+
+function playStep(idx, filtered) {
+  if (!isPlaying) return;
+  if (!filtered || idx >= filtered.length) {
+    stopPlay();
+    return;
+  }
+
+  const loc = filtered[idx];
+  deselectPin(selectedEntity);
+  selectedEntity = entities[loc.id] || null;
+  selectPin(selectedEntity);
+  showInfoPanel(loc);
+
+  // Fly takes 1.8s, then dwell 3s at the location
+  playTimer = setTimeout(() => {
+    if (!isPlaying) return;
+    playStep(idx + 1, filtered);
+  }, 5000);
+}
+
+function updatePlayButton() {
+  const btn = document.getElementById('play-btn');
+  if (!btn) return;
+  btn.textContent = isPlaying ? '⏹ Stop Journey' : '▶ Play Journey';
+  btn.classList.toggle('playing', isPlaying);
+}
+
+// ── Timeline year scrubber ──────────────────────────────────────────────────
+function setupTimeline() {
+  const slider  = document.getElementById('year-slider');
+  const display = document.getElementById('year-display');
+  const resetBtn = document.getElementById('tl-reset-btn');
+  if (!slider) return;
+
+  // Build phase tick marks on the timeline
+  const tickContainer = document.getElementById('tl-ticks');
+  if (tickContainer) {
+    PHASES.forEach(p => {
+      const m = p.years.match(/(\d{4})/);
+      if (!m) return;
+      const yr = parseInt(m[1], 10);
+      const pct = ((yr - 1863) / (1902 - 1863)) * 100;
+      const tick = document.createElement('div');
+      tick.className = 'tl-tick';
+      tick.style.left = `${pct}%`;
+      tick.style.background = p.color;
+      tick.title = `${p.name} (${p.years})`;
+      tickContainer.appendChild(tick);
+    });
+  }
+
+  function applyYear(yr) {
+    timelineYear = yr;
+    if (display) display.textContent = yr >= 1902 ? 'All Years' : `Up to ${yr}`;
+    applyVisibility();
+    // Update slider fill
+    const pct = ((yr - 1863) / (1902 - 1863)) * 100;
+    slider.style.setProperty('--tl-val', pct);
+  }
+
+  slider.addEventListener('input', () => {
+    applyYear(parseInt(slider.value, 10));
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      slider.value = 1902;
+      applyYear(1902);
+    });
+  }
+
+  // Init
+  applyYear(1902);
+}
+
+// ── Sidebar collapse ────────────────────────────────────────────────────────
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  const sidebar = document.getElementById('sidebar');
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  sidebar.classList.toggle('collapsed', sidebarCollapsed);
+  if (toggleBtn) toggleBtn.textContent = sidebarCollapsed ? '▶' : '◀';
+}
+
+// ── Keyboard navigation ────────────────────────────────────────────────────
+function setupKeyboard() {
+  document.addEventListener('keydown', e => {
+    // Don't fire when typing in search box
+    if (e.target.tagName === 'INPUT') return;
+
+    switch (e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        goNext();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        goPrev();
+        break;
+      case 'Escape':
+        if (isPlaying) { stopPlay(); }
+        else { closeInfoPanel(); deselectPin(selectedEntity); selectedEntity = null; }
+        break;
+      case ' ':
+        e.preventDefault();
+        startPlay();
+        break;
+    }
+  });
+}
+
+// ── Location list & phase descriptions ─────────────────────────────────────
 function buildTimeline() {
-  // Update header stat
   const statEl = document.getElementById('stat-locs');
   if (statEl) statEl.textContent = LOCATIONS.length;
 
-  // Build phase description cards in the Phases tab
   const descContainer = document.getElementById('phase-desc-container');
   if (descContainer) {
     descContainer.innerHTML = '';
@@ -491,7 +747,12 @@ function buildTimeline() {
           <div class="loc-name">${loc.name}</div>
           <div class="loc-meta">${loc.country}${loc.date ? ' · ' + loc.date.split(',')[0] : ''}</div>
         </div>`;
-      item.addEventListener('click', () => showInfoPanel(loc));
+      item.addEventListener('click', () => {
+        deselectPin(selectedEntity);
+        selectedEntity = entities[loc.id] || null;
+        selectPin(selectedEntity);
+        showInfoPanel(loc);
+      });
       section.appendChild(item);
     });
 
@@ -499,7 +760,7 @@ function buildTimeline() {
   });
 }
 
-// ── Search ─────────────────────────────────────────────────────────────────
+// ── Search ──────────────────────────────────────────────────────────────────
 function setupSearch() {
   const input = document.getElementById('search-input');
   input.addEventListener('input', () => {
@@ -516,14 +777,13 @@ function setupSearch() {
   });
 }
 
-// ── Zoom Bar ───────────────────────────────────────────────────────────────
-const ZOOM_MIN = 400;          // ~400 m — street level
-const ZOOM_MAX = 20000000;     // 20,000 km — full globe
+// ── Zoom Bar ────────────────────────────────────────────────────────────────
+const ZOOM_MIN = 400;
+const ZOOM_MAX = 20000000;
 
 function altToSlider(alt) {
   const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, alt));
   const logMin = Math.log(ZOOM_MIN), logMax = Math.log(ZOOM_MAX);
-  // slider 100 = zoomed in (min alt), slider 0 = zoomed out (max alt)
   return Math.round(100 * (1 - (Math.log(clamped) - logMin) / (logMax - logMin)));
 }
 
@@ -550,7 +810,6 @@ function setupZoomBar() {
     const alt = currentAlt();
     const v   = altToSlider(alt);
     slider.value = v;
-    // update CSS custom property so the filled-track gradient follows the thumb
     slider.style.setProperty('--val', v);
     label.textContent = formatAlt(alt);
   }
@@ -565,10 +824,8 @@ function setupZoomBar() {
     });
   }
 
-  // Keep slider in sync whenever camera position changes
   viewer.camera.changed.addEventListener(updateUI);
 
-  // Slider drag → instant zoom (cancel any in-progress flyTo first)
   slider.addEventListener('input', () => {
     const alt = sliderToAlt(parseInt(slider.value, 10));
     const pos = viewer.camera.positionCartographic;
@@ -580,27 +837,26 @@ function setupZoomBar() {
     label.textContent = formatAlt(alt);
   });
 
-  // + / − buttons (zoom by ×0.4 / ×2.5)
   zoomIn.addEventListener('click',  () => flyToAlt(currentAlt() * 0.4));
   zoomOut.addEventListener('click', () => flyToAlt(currentAlt() * 2.5));
 
-  // Initialise
   updateUI();
 }
 
-// ── Fly home ───────────────────────────────────────────────────────────────
+// ── Fly home ────────────────────────────────────────────────────────────────
 function flyHome() {
+  stopPlay();
   viewer.camera.flyTo({
     destination: Cesium.Cartesian3.fromDegrees(78.0, 20.0, 14000000),
     duration: 2,
     easingFunction: Cesium.EasingFunction.CUBIC_OUT
   });
   closeInfoPanel();
-  if (selectedEntity) selectedEntity.billboard.scale = 1.0;
+  deselectPin(selectedEntity);
   selectedEntity = null;
 }
 
-// ── Tab switching ───────────────────────────────────────────────────────────
+// ── Tab switching ────────────────────────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -608,5 +864,5 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active');
 }
 
-// ── Start ───────────────────────────────────────────────────────────────────
+// ── Start ────────────────────────────────────────────────────────────────────
 window.addEventListener('load', init);

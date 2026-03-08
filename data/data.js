@@ -89,6 +89,7 @@ window.LOCATIONS_DATA = [
     "lat": 22.6553,
     "lng": 88.3681,
     "date": "1886–1892",
+    "image":"Vivekananda_Baranagar_1887.jpg",
     "significance": "First monastery",
     "desc": "After Ramakrishna's passing in 1886, the young disciples rented this dilapidated house and established the first Ramakrishna Math. Narendra and his brothers lived here as renunciates, conducting rigorous spiritual practice."
   },
@@ -150,6 +151,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "dakshineswar",
+    "image": "Dakshineswar_Kali_Temple.jpg",
     "phase": "p1",
     "name": "Dakshineswar Kali Temple",
     "place": "Dakshineswar",
@@ -164,6 +166,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "belur_math",
+    "image": "Belur_Math.jpg",
     "phase": "p3",
     "name": "Belur Math",
     "place": "Belur",
@@ -220,6 +223,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "varanasi",
+    "image": "Varanasi-Ghats.jpg",
     "phase": "p1",
     "name": "Varanasi (Benares)",
     "place": "Kashi Vishwanath area",
@@ -234,6 +238,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "sarnath",
+    "image": "Dhamek_Stupa_Sarnath_2013.jpg",
     "phase": "p5",
     "name": "Sarnath",
     "place": "Sarnath",
@@ -276,6 +281,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "vrindavan",
+    "image": "Vrindavan-Krishna-Balaram_Temple.jpg",
     "phase": "p1",
     "name": "Vrindavan",
     "place": "Sacred town of Krishna",
@@ -290,6 +296,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "mathura",
+    "image": "Krishna_Janmabhoomi_temple_complex.jpg",
     "phase": "p1",
     "name": "Mathura",
     "place": "Birthplace of Krishna",
@@ -304,6 +311,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "agra",
+    "image": "Taj_Mahal,_Agra,_India_edit3.jpg",
     "phase": "p1",
     "name": "Agra",
     "place": "Taj Mahal area",
@@ -318,6 +326,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "haridwar",
+    "image": "Kumbh_Mela_Haridwar_2010.jpg",
     "phase": "p1",
     "name": "Haridwar",
     "place": "Har Ki Pauri Ghat",
@@ -332,6 +341,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "rishikesh",
+    "image": "Rishikesh_Ram_Jhula.jpg",
     "phase": "p1",
     "name": "Rishikesh",
     "place": "Banks of the Ganges",
@@ -360,6 +370,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "mayavati",
+    "image": "Advaita_Ashrama_Mayavati.jpg",
     "phase": "p3",
     "name": "Advaita Ashrama, Mayavati",
     "place": "Mayavati, Champawat",
@@ -416,6 +427,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "jaipur",
+    "image": "Hawa_Mahal,_Jaipur_10.jpg",
     "phase": "p1",
     "name": "Jaipur",
     "place": "Pink City",
@@ -430,6 +442,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "ajmer",
+    "image": "Dargah_Sharif,_Ajmer.jpg",
     "phase": "p1",
     "name": "Ajmer",
     "place": "Ajmer Sharif / Pushkar",
@@ -458,6 +471,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "mount_abu",
+    "image": "Dilwara_Temples,_Mount_Abu.jpg",
     "phase": "p1",
     "name": "Mount Abu",
     "place": "Dilwara Jain Temples",
@@ -598,6 +612,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "mysore",
+    "image": "Mysore_Palace_Morning.jpg",
     "phase": "p1",
     "name": "Mysore",
     "place": "Mysore Palace",
@@ -612,6 +627,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "hyderabad",
+    "image": "Charminar.jpg",
     "phase": "p1",
     "name": "Hyderabad",
     "place": "Hyderabad city",
@@ -626,6 +642,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "madras",
+    "image": "Kapaleeshwarar_temple,_Chennai.jpg",
     "phase": "p1",
     "name": "Madras (Chennai)",
     "place": "Triplicane / Castle Kernan",
@@ -640,6 +657,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "kanyakumari",
+    "image": "Vivekananda_Rock_Memorial.jpg",
     "phase": "p1",
     "name": "Kanyakumari — The Rock",
     "place": "Vivekananda Rock Memorial",
@@ -654,6 +672,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "rameswaram",
+    "image": "Ramanathaswamy_Temple,_Rameswaram.jpg",
     "phase": "p1",
     "name": "Rameswaram",
     "place": "Ramanathaswamy Temple",
@@ -682,6 +701,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "madurai",
+    "image": "Meenakshi_Temple_madurai.jpg",
     "phase": "p1",
     "name": "Madurai",
     "place": "Meenakshi Amman Temple",
@@ -724,6 +744,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "puri",
+    "image": "Jagannath_Temple_Puri.jpg",
     "phase": "p1",
     "name": "Puri (Jagannath Temple)",
     "place": "Jagannath Temple",
@@ -738,6 +759,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "bodh_gaya",
+    "image": "Mahabodhi_temple_in_Bodh_Gaya.jpg",
     "phase": "p5",
     "name": "Bodh Gaya",
     "place": "Mahabodhi Temple",
@@ -822,6 +844,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "colombo",
+    "image": "Colombo_Sri_Lanka_Skyline.jpg",
     "phase": "p2",
     "name": "Colombo",
     "place": "Colombo Harbour",
@@ -1032,6 +1055,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "new_york",
+    "image": "Lower_Manhattan_from_the_Hudson_River.jpg",
     "phase": "p2",
     "name": "New York City",
     "place": "Broadway / 54th Street",
@@ -1046,6 +1070,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "boston",
+    "image": "Faneuil_Hall,_Boston.jpg",
     "phase": "p2",
     "name": "Boston",
     "place": "Cambridge / Harvard area",
@@ -1186,6 +1211,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "london",
+    "image": "Houses_of_Parliament_from_the_Thames.jpg",
     "phase": "p2",
     "name": "London",
     "place": "Wimbledon / Belgravia",
@@ -1214,6 +1240,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "paris",
+    "image": "Eiffel_Tower_from_Champ_de_Mars.jpg",
     "phase": "p4",
     "name": "Paris",
     "place": "Congress of Religions, Paris",
@@ -1228,6 +1255,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "cairo",
+    "image": "Cairo,_Egypt.jpg",
     "phase": "p4",
     "name": "Cairo",
     "place": "Egyptian Museum / Old Cairo",
@@ -2810,6 +2838,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "art_institute_chicago",
+    "image": "The_Art_Institute_of_Chicago.jpg",
     "phase": "p2",
     "name": "Art Institute of Chicago (Parliament site)",
     "place": "Michigan Ave, Chicago",
@@ -2992,6 +3021,7 @@ window.LOCATIONS_DATA = [
   },
   {
     "id": "tirupati",
+    "image": "Tirumala_Tirupati_temple.jpg",
     "phase": "p1",
     "name": "Tirupati",
     "place": "Tirumala Venkateswara Temple",
