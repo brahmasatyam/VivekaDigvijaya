@@ -10,13 +10,15 @@ let PIN_CONTENT = {};   // id → { title, description: [...] }
 let viewer = null;
 let pinImages = {};            // phase-id → canvas pin image
 let entities = {};             // loc.id → Cesium entity
-let activePhases = new Set();  // which phases are visible
+let activePhases    = new Set();  // which phases are visible
+let activeCountries = new Set();  // which countries are visible
 let routePolylines = {};       // phase-id → polyline entity
 let selectedEntity = null;
 let currentLocIndex = -1;      // index in LOCATIONS of the selected location
 let isPlaying = false;
 let playTimer = null;
-let timelineYear = 1902;       // show locations up to this year (1902 = all)
+let timelineYearStart = 1863;  // range slider — start year
+let timelineYearEnd   = 1902;  // range slider — end year
 let sidebarCollapsed = false;
 
 // ── Phase-specific quotes ──────────────────────────────────────────────────
@@ -58,6 +60,26 @@ const PHASE_QUOTES = {
   ]
 };
 
+// ── Country flag emoji map ─────────────────────────────────────────────────
+const COUNTRY_FLAGS = {
+  'Canada':         '🇨🇦',
+  'China':          '🇨🇳',
+  'Egypt':          '🇪🇬',
+  'England':        '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+  'France':         '🇫🇷',
+  'Germany':        '🇩🇪',
+  'India':          '🇮🇳',
+  'Italy':          '🇮🇹',
+  'Japan':          '🇯🇵',
+  'Malaysia':       '🇲🇾',
+  'Nepal':                 '🇳🇵',
+  'Pre-Independence India':'🇮🇳',
+  'Singapore':             '🇸🇬',
+  'Sri Lanka':      '🇱🇰',
+  'USA':            '🇺🇸',
+  'United Kingdom': '🇬🇧'
+};
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function extractYear(dateStr) {
   if (!dateStr) return null;
@@ -75,12 +97,13 @@ function wikiSearchUrl(loc) {
   return `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`;
 }
 
-// Returns LOCATIONS filtered by activePhases and timelineYear (in original order)
+// Returns LOCATIONS filtered by activePhases, activeCountries and year range (in original order)
 function getFilteredLocations() {
   return LOCATIONS.filter(loc => {
     if (!activePhases.has(loc.phase)) return false;
+    if (!activeCountries.has(loc.country)) return false;
     const yr = extractYear(loc.date);
-    if (yr !== null && yr > timelineYear) return false;
+    if (yr !== null && (yr < timelineYearStart || yr > timelineYearEnd)) return false;
     return true;
   });
 }
@@ -109,6 +132,7 @@ async function init() {
   try {
     await loadData();
     buildLegend();
+    buildCountryList();
     await initCesium();
     buildTimeline();
     setupSearch();
@@ -173,6 +197,169 @@ function buildLegend() {
   });
 }
 
+// ── Fly to a single location, centred in the visible area ───────────────────
+// The sidebar (left) and info panel (right) are CSS overlays on top of the
+// full-width canvas.  The pin would land at the canvas centre, which is offset
+// from the visual centre between the two panels.  We shift the fly-to
+// destination by the equivalent longitude offset so the pin sits at the
+// centre of what the user can actually see.
+function flyToLocationCentered(loc) {
+  const altitude = 1400000;   // ~1 400 km — city-region zoom, pin clearly visible
+  if (!viewer) return;
+
+  const canvas  = viewer.scene.canvas;
+  const canvasW = canvas.clientWidth;
+  const canvasH = canvas.clientHeight;
+
+  // Measure overlay widths from the live DOM
+  const sidebarEl = document.getElementById('sidebar');
+  const sidebarW  = (sidebarEl && !sidebarCollapsed) ? sidebarEl.offsetWidth : 0;
+  const INFO_PANEL_W = 360;   // matches CSS --info-w
+
+  // Pixel distance between visible-area centre and canvas centre
+  // positive = visible centre is to the RIGHT of canvas centre
+  const visibleCX = sidebarW + (canvasW - sidebarW - INFO_PANEL_W) / 2;
+  const dxPx      = visibleCX - canvasW / 2;
+
+  // Convert pixel offset → longitude degrees at the target altitude & latitude
+  // viewer.camera.frustum.fov is the vertical FOV in radians
+  const vFov   = (viewer.camera.frustum && viewer.camera.frustum.fov)
+                   ? viewer.camera.frustum.fov
+                   : Cesium.Math.toRadians(60);
+  const aspect = canvasW / canvasH;
+  const hFov   = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+  const spanM  = 2 * altitude * Math.tan(hFov / 2);   // total world width in metres
+  // Negate: camera must move in the OPPOSITE direction to the visible-centre offset
+  // e.g. visible centre left of canvas centre → camera flies right of the pin
+  const dxM    = -(dxPx / canvasW) * spanM;
+  const dLng   = dxM / (111320 * Math.cos(Cesium.Math.toRadians(loc.lat)));
+
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(loc.lng + dLng, loc.lat, altitude),
+    duration: 1.8,
+    easingFunction: Cesium.EasingFunction.CUBIC_OUT
+  });
+}
+
+// ── Fly to a set of locations ────────────────────────────────────────────────
+function flyToBounds(locs, duration) {
+  if (!locs || !locs.length) return;
+  duration = (duration !== undefined) ? duration : 1.5;
+
+  let minLat =  Infinity, maxLat = -Infinity;
+  let minLng =  Infinity, maxLng = -Infinity;
+  locs.forEach(loc => {
+    minLat = Math.min(minLat, loc.lat);
+    maxLat = Math.max(maxLat, loc.lat);
+    minLng = Math.min(minLng, loc.lng);
+    maxLng = Math.max(maxLng, loc.lng);
+  });
+
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  const span      = Math.max(maxLat - minLat, maxLng - minLng, 1.5);
+
+  // ~111 km per degree; multiply by padding factor; clamp to sane range
+  const altitude  = Math.max(600000, Math.min(14000000, span * 111000 * 2.8));
+
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, altitude),
+    duration,
+    easingFunction: Cesium.EasingFunction.CUBIC_OUT
+  });
+}
+
+// ── Country list ─────────────────────────────────────────────────────────────
+function buildCountryList() {
+  // Count locations per country and collect unique countries
+  const countMap = {};
+  LOCATIONS.forEach(loc => {
+    const c = loc.country || 'Unknown';
+    countMap[c] = (countMap[c] || 0) + 1;
+  });
+  const countries = Object.keys(countMap).sort();
+
+  // Initialise all countries as active
+  countries.forEach(c => activeCountries.add(c));
+
+  // Update header stat
+  const statEl = document.getElementById('stat-countries');
+  if (statEl) statEl.textContent = countries.length;
+
+  const list = document.getElementById('country-list');
+  list.innerHTML = '';
+
+  // "All Countries" toggle
+  const allBtn = document.createElement('div');
+  allBtn.className = 'country-item all-countries active';
+  allBtn.dataset.country = 'all';
+  allBtn.innerHTML = `
+    <span class="country-flag">🌐</span>
+    <span class="country-name">All Countries</span>
+    <span class="country-count">${LOCATIONS.length}</span>`;
+  list.appendChild(allBtn);
+
+  // Individual country rows
+  countries.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'country-item active';
+    item.dataset.country = c;
+    const flag = COUNTRY_FLAGS[c] || '📍';
+    item.innerHTML = `
+      <span class="country-flag">${flag}</span>
+      <span class="country-name">${c}</span>
+      <span class="country-count">${countMap[c]}</span>`;
+    list.appendChild(item);
+  });
+
+  // Click handler
+  list.addEventListener('click', e => {
+    const item = e.target.closest('.country-item');
+    if (!item) return;
+    const country = item.dataset.country;
+
+    if (country === 'all') {
+      const allActive = activeCountries.size === countries.length;
+      if (allActive) {
+        activeCountries.clear();
+        document.querySelectorAll('.country-item:not(.all-countries)').forEach(el => el.classList.remove('active'));
+        item.classList.remove('active');
+      } else {
+        countries.forEach(c => activeCountries.add(c));
+        document.querySelectorAll('.country-item').forEach(el => el.classList.add('active'));
+      }
+      applyVisibility();
+      // Fly to all currently visible pins if any remain
+      const visible = getFilteredLocations();
+      if (visible.length) flyToBounds(visible, 1.8);
+
+    } else {
+      const wasActive = activeCountries.has(country);
+      if (wasActive) {
+        activeCountries.delete(country);
+        item.classList.remove('active');
+      } else {
+        activeCountries.add(country);
+        item.classList.add('active');
+      }
+      const allBtn2 = list.querySelector('.all-countries');
+      if (allBtn2) allBtn2.classList.toggle('active', activeCountries.size === countries.length);
+
+      applyVisibility();
+
+      if (!wasActive) {
+        // Country just selected — fly to all its locations on the globe
+        const countryLocs = LOCATIONS.filter(l => l.country === country);
+        if (countryLocs.length) flyToBounds(countryLocs, 1.5);
+      } else {
+        // Country deselected — fly to remaining visible pins, or stay if none
+        const visible = getFilteredLocations();
+        if (visible.length) flyToBounds(visible, 1.5);
+      }
+    }
+  });
+}
+
 // ── Custom pin builder ──────────────────────────────────────────────────────
 function lightenHex(hex, t) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -186,53 +373,161 @@ function darkenHex(hex, t) {
   return `#${[r,g,b].map(v=>d(v).toString(16).padStart(2,'0')).join('')}`;
 }
 
-function buildPinCanvas(color, displaySize) {
-  const dpr = 2;
-  const pw  = displaySize * dpr;
-  const pad = 4 * dpr;
-  const r   = pw / 2 - pad;
-  const cx  = pw / 2;
-  const cy  = r + pad;
-  const dist = r * 1.55;
-  const pointY = cy + dist;
-  const ph  = Math.ceil(pointY + pad);
+// ── Phase image loading ──────────────────────────────────────────────────────
+// Tries to load data/images/phase_<id>.jpg then .png; resolves null on failure
+function loadImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function loadPhaseImages() {
+  const phaseImgEls = {};
+
+  // Prefer pre-built base64 data from phase_images.js (generated by
+  // build_phase_images.py). Data URLs are same-origin so they never taint
+  // the canvas — this works correctly in file:// mode.
+  if (window.PHASE_IMAGES_DATA && Object.keys(window.PHASE_IMAGES_DATA).length) {
+    await Promise.all(PHASES.map(async p => {
+      const src = window.PHASE_IMAGES_DATA[p.id];
+      if (src) {
+        const img = await loadImage(src);
+        if (img) phaseImgEls[p.id] = img;
+      }
+    }));
+    return phaseImgEls;
+  }
+
+  // Fallback: load directly when served via http/https (no canvas taint risk).
+  // Skip on file:// protocol — new Image() with local paths taints the canvas
+  // in Safari/Firefox, breaking toDataURL().
+  if (window.location.protocol === 'file:') return {};
+  await Promise.all(PHASES.map(async p => {
+    const base = 'data/images/phase_' + p.id;
+    let img = await loadImage(base + '.jpg');
+    if (!img) img = await loadImage(base + '.png');
+    if (!img) img = await loadImage(base + '.jpeg');
+    if (img) phaseImgEls[p.id] = img;
+  }));
+  return phaseImgEls;
+}
+
+function buildPinCanvas(color, displaySize, headImg, selected) {
+  const dpr  = 2;
+  const pw   = displaySize * dpr;           // canvas width = rectangle width
+  const rh   = Math.round(pw * 0.82);       // rectangle height
+  const cr   = Math.round(pw * 0.16);       // top corner radius
+  const tw   = Math.round(pw * 0.30);       // tail base width
+  const th   = Math.round(pw * 0.28);       // tail height
+  const vpad = Math.round(3 * dpr);         // top & bottom padding (shadow room)
+  const ch   = vpad + rh + th + vpad;       // total canvas height
 
   const canvas = document.createElement('canvas');
   canvas.width  = pw;
-  canvas.height = ph;
+  canvas.height = ch;
   const ctx = canvas.getContext('2d');
 
-  const halfAngle = Math.asin(r / dist);
-  const startA    = Math.PI / 2 + halfAngle;
-  const endA      = Math.PI / 2 - halfAngle;
+  // Key coordinates
+  const lx  = 0,        rx  = pw;          // left / right of rectangle
+  const ty  = vpad,     by  = vpad + rh;   // top / bottom of rectangle
+  const mx  = pw / 2;                       // horizontal centre
+  const tip = vpad + rh + th;              // y of pointer tip
 
+  // ── Drop shadow ────────────────────────────────────────────────────────────
   ctx.shadowColor   = 'rgba(0,0,0,0.52)';
-  ctx.shadowBlur    = 7 * dpr;
+  ctx.shadowBlur    = 5 * dpr;
   ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 2.5 * dpr;
+  ctx.shadowOffsetY = 2 * dpr;
 
+  // ── Flag / shield shape ───────────────────────────────────────────────────
+  //   ┌──────────┐
+  //   │          │   ← rounded top corners
+  //   └───┬──────┘   ← flat bottom with centre pointer
+  //       ▼
   ctx.beginPath();
-  ctx.moveTo(cx, pointY);
-  ctx.arc(cx, cy, r, startA, endA, false);
+  ctx.moveTo(lx + cr, ty);                  // top-left arc start
+  ctx.lineTo(rx - cr, ty);                  // top edge
+  ctx.arcTo(rx, ty,  rx, ty + cr, cr);      // top-right corner
+  ctx.lineTo(rx, by);                       // right edge
+  ctx.lineTo(mx + tw / 2, by);             // bottom-right → notch start
+  ctx.lineTo(mx, tip);                      // right diagonal → pointer tip
+  ctx.lineTo(mx - tw / 2, by);             // left diagonal back up
+  ctx.lineTo(lx, by);                       // bottom-left from notch
+  ctx.lineTo(lx, ty + cr);                  // left edge
+  ctx.arcTo(lx, ty, lx + cr, ty, cr);      // top-left corner
   ctx.closePath();
 
-  const gx = cx - r * 0.3, gy = cy - r * 0.3;
-  const grad = ctx.createRadialGradient(gx, gy, r * 0.05, cx, cy, r * 1.2);
-  grad.addColorStop(0,   lightenHex(color, 0.6));
-  grad.addColorStop(0.55, color);
-  grad.addColorStop(1,   darkenHex(color, 0.25));
+  // Phase-colour gradient fill
+  const grad = ctx.createLinearGradient(0, ty, 0, by);
+  grad.addColorStop(0, lightenHex(color, 0.42));
+  grad.addColorStop(1, darkenHex(color, 0.22));
   ctx.fillStyle = grad;
   ctx.fill();
 
   ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = 'rgba(255,255,255,0.88)';
-  ctx.lineWidth   = 2 * dpr;
-  ctx.stroke();
 
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.30, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.fill();
+  // Outer stroke — only drawn when selected (gold highlight), removed otherwise
+  if (selected) {
+    ctx.strokeStyle = '#f0c040';
+    ctx.lineWidth   = 3 * dpr;
+    ctx.stroke();
+  }
+
+  if (headImg) {
+    // ── Photo clipped to the rectangle (inset by border width) ──────────────
+    const brd  = Math.round(2.5 * dpr);    // frame border width
+    const ilx  = lx + brd,  irx = rx - brd;
+    const ity  = ty + brd,  iby = by;      // no bottom inset — image to tail edge
+    const icr  = Math.max(cr - brd, 2);
+    const imgW = irx - ilx,  imgH = iby - ity;
+
+    // Clip to inner rounded-top rectangle
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(ilx + icr, ity);
+    ctx.lineTo(irx - icr, ity);
+    ctx.arcTo(irx, ity, irx, ity + icr, icr);
+    ctx.lineTo(irx, iby);
+    ctx.lineTo(ilx, iby);
+    ctx.lineTo(ilx, ity + icr);
+    ctx.arcTo(ilx, ity, ilx + icr, ity, icr);
+    ctx.closePath();
+    ctx.clip();
+
+    // Cover-fit image — biased toward top (vFocus=0.1) so portrait faces show
+    const iw    = headImg.naturalWidth  || headImg.width;
+    const ih    = headImg.naturalHeight || headImg.height;
+    const scale = Math.max(imgW / iw, imgH / ih);
+    const dw    = iw * scale,  dh = ih * scale;
+    const vFocus = 0.1;   // 0 = top-aligned, 0.5 = centred, 1 = bottom-aligned
+    ctx.drawImage(headImg, ilx + (imgW - dw) / 2, ity + (imgH - dh) * vFocus, dw, dh);
+
+    // Subtle dark gradient overlay at bottom of photo
+    const ovG = ctx.createLinearGradient(0, iby - imgH * 0.38, 0, iby);
+    ovG.addColorStop(0, 'rgba(0,0,0,0)');
+    ovG.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = ovG;
+    ctx.fillRect(ilx, iby - imgH * 0.38, imgW, imgH * 0.38);
+
+    ctx.restore();
+
+    // Inner border frame — gold when selected, phase colour otherwise
+    ctx.beginPath();
+    ctx.moveTo(ilx + icr, ity);
+    ctx.lineTo(irx - icr, ity);
+    ctx.arcTo(irx, ity, irx, ity + icr, icr);
+    ctx.lineTo(irx, iby);
+    ctx.lineTo(ilx, iby);
+    ctx.lineTo(ilx, ity + icr);
+    ctx.arcTo(ilx, ity, ilx + icr, ity, icr);
+    ctx.closePath();
+    ctx.strokeStyle = selected ? '#f0c040' : color;
+    ctx.lineWidth   = selected ? brd * 1.4 : brd;
+    ctx.stroke();
+  }
 
   return canvas;
 }
@@ -279,11 +574,8 @@ async function initCesium() {
   const labLayer = viewer.imageryLayers.addImageryProvider(labels);
   labLayer.alpha = 0.7;
 
-  // ── Day / night sun lighting ─────────────────────────────────────────────
-  viewer.scene.globe.enableLighting = true;
-  // Fix clock to a realistic daytime so India is illuminated
-  viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date('2024-01-15T06:00:00Z'));
-  viewer.clock.shouldAnimate = false;
+  // ── Lighting ─────────────────────────────────────────────────────────────
+  viewer.scene.globe.enableLighting = false;
 
   // ── Camera ────────────────────────────────────────────────────────────────
   viewer.camera.flyTo({
@@ -292,13 +584,18 @@ async function initCesium() {
   });
 
   // ── Build pin images ──────────────────────────────────────────────────────
+  // Load optional per-phase photos from data/images/phase_<id>.jpg|png
+  const phaseImgEls = await loadPhaseImages();
+
   PHASES.forEach(p => {
-    pinImages[p.id]        = buildPinCanvas(p.color, 36).toDataURL();
-    pinImages[p.id + '_ks']= buildPinCanvas(p.color, 46).toDataURL();
+    const img = phaseImgEls[p.id] || null;
+    // Normal & keystone variants
+    pinImages[p.id]              = buildPinCanvas(p.color, 42, img, false).toDataURL();
+    pinImages[p.id + '_ks']      = buildPinCanvas(p.color, 54, img, false).toDataURL();
+    // Selected variants: same image but gold border
+    pinImages[p.id + '_sel']     = buildPinCanvas(p.color, 42, img, true).toDataURL();
+    pinImages[p.id + '_ks_sel']  = buildPinCanvas(p.color, 54, img, true).toDataURL();
   });
-  // Selected-state pins: white body so they stand out from every phase colour
-  pinImages['selected_sm'] = buildPinCanvas('#ffffff', 44).toDataURL();
-  pinImages['selected_lg'] = buildPinCanvas('#ffffff', 56).toDataURL();
 
   // ── Add location entities ─────────────────────────────────────────────────
   LOCATIONS.forEach(loc => {
@@ -313,8 +610,8 @@ async function initCesium() {
         image: isKeystone
           ? (pinImages[loc.phase + '_ks'] || pinImages[loc.phase])
           : (pinImages[loc.phase]          || pinImages[PHASES[0].id]),
-        width:  isKeystone ? 46 : 36,
-        height: isKeystone ? 80 : 63,
+        width:  isKeystone ? 54 : 42,
+        height: isKeystone ? 66 : 53,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         scaleByDistance: new Cesium.NearFarScalar(2e6, 1.0, 1e7, 0.55)
@@ -369,9 +666,9 @@ async function initCesium() {
       selectedEntity = picked.id;
       selectPin(selectedEntity);
     } else {
-      closeInfoPanel();
       deselectPin(selectedEntity);
       selectedEntity = null;
+      closeInfoPanel();
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -406,8 +703,11 @@ function selectPin(entity) {
   if (!entity) return;
   const loc = entity._locData;
   const big = loc && loc.significance && loc.significance.includes('—');
-  entity.billboard.image = big ? pinImages['selected_lg'] : pinImages['selected_sm'];
-  entity.billboard.scale = 1.6;
+  // Swap to gold-border variant of the same pin — keeps the photo, adds highlight
+  entity.billboard.image = big
+    ? (pinImages[loc.phase + '_ks_sel'] || pinImages[loc.phase + '_sel'] || pinImages[loc.phase + '_ks'])
+    : (pinImages[loc.phase + '_sel']    || pinImages[loc.phase]);
+  entity.billboard.scale = 1.25;
 }
 
 function deselectPin(entity) {
@@ -426,10 +726,13 @@ function applyVisibility() {
   LOCATIONS.forEach(loc => {
     const ent = entities[loc.id];
     if (!ent) return;
-    const phaseOn = activePhases.has(loc.phase);
-    const yr = extractYear(loc.date);
-    const yearOn = (yr === null) || (yr <= timelineYear);
-    ent.show = phaseOn && yearOn;
+    const isSelected = selectedEntity && ent === selectedEntity;
+    const phaseOn    = activePhases.has(loc.phase);
+    const countryOn  = activeCountries.has(loc.country);
+    const yr         = extractYear(loc.date);
+    const yearOn     = (yr === null) || (yr >= timelineYearStart && yr <= timelineYearEnd);
+    // Always show the currently selected pin even if its filters are off
+    ent.show = isSelected || (phaseOn && countryOn && yearOn);
   });
   PHASES.forEach(p => {
     const pl = routePolylines[p.id];
@@ -508,12 +811,8 @@ function showInfoPanel(loc) {
 
   panel.classList.add('open');
 
-  // Fly to location
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(loc.lng, loc.lat, 1800000),
-    duration: 1.8,
-    easingFunction: Cesium.EasingFunction.CUBIC_OUT
-  });
+  // Fly so the pin sits at the centre of the visible area (between sidebar & info panel)
+  flyToLocationCentered(loc);
 
   // Highlight in sidebar
   document.querySelectorAll('.loc-item').forEach(el => el.classList.remove('active'));
@@ -524,6 +823,8 @@ function showInfoPanel(loc) {
 function closeInfoPanel() {
   document.getElementById('info-panel').classList.remove('open');
   document.querySelectorAll('.loc-item').forEach(el => el.classList.remove('active'));
+  // Re-apply filters now that no pin is forced visible
+  applyVisibility();
 }
 
 function updateNavCounter() {
@@ -610,12 +911,14 @@ function updatePlayButton() {
   btn.classList.toggle('playing', isPlaying);
 }
 
-// ── Timeline year scrubber ──────────────────────────────────────────────────
+// ── Timeline year range scrubber ────────────────────────────────────────────
 function setupTimeline() {
-  const slider  = document.getElementById('year-slider');
-  const display = document.getElementById('year-display');
-  const resetBtn = document.getElementById('tl-reset-btn');
-  if (!slider) return;
+  const sliderStart   = document.getElementById('year-slider-start');
+  const sliderEnd     = document.getElementById('year-slider-end');
+  const display       = document.getElementById('year-display');
+  const resetBtn      = document.getElementById('tl-reset-btn');
+  const rangeFill     = document.getElementById('tl-range-fill');
+  if (!sliderStart || !sliderEnd) return;
 
   // Build phase tick marks on the timeline
   const tickContainer = document.getElementById('tl-ticks');
@@ -634,28 +937,47 @@ function setupTimeline() {
     });
   }
 
-  function applyYear(yr) {
-    timelineYear = yr;
-    if (display) display.textContent = yr >= 1902 ? 'All Years' : `Up to ${yr}`;
-    applyVisibility();
-    // Update slider fill
-    const pct = ((yr - 1863) / (1902 - 1863)) * 100;
-    slider.style.setProperty('--tl-val', pct);
+  function updateFill(s, e) {
+    if (!rangeFill) return;
+    const pctL = ((s - 1863) / (1902 - 1863)) * 100;
+    const pctR = ((e - 1863) / (1902 - 1863)) * 100;
+    rangeFill.style.left  = pctL + '%';
+    rangeFill.style.width = (pctR - pctL) + '%';
   }
 
-  slider.addEventListener('input', () => {
-    applyYear(parseInt(slider.value, 10));
+  function applyRange(s, e) {
+    timelineYearStart = s;
+    timelineYearEnd   = e;
+    const allYears = (s === 1863 && e === 1902);
+    if (display) display.textContent = allYears ? 'All Years' : `${s} – ${e}`;
+    updateFill(s, e);
+    applyVisibility();
+  }
+
+  sliderStart.addEventListener('input', () => {
+    let s = parseInt(sliderStart.value, 10);
+    const e = parseInt(sliderEnd.value, 10);
+    if (s > e) { s = e; sliderStart.value = s; }
+    applyRange(s, e);
+  });
+
+  sliderEnd.addEventListener('input', () => {
+    const s = parseInt(sliderStart.value, 10);
+    let e = parseInt(sliderEnd.value, 10);
+    if (e < s) { e = s; sliderEnd.value = e; }
+    applyRange(s, e);
   });
 
   if (resetBtn) {
     resetBtn.addEventListener('click', () => {
-      slider.value = 1902;
-      applyYear(1902);
+      sliderStart.value = 1863;
+      sliderEnd.value   = 1902;
+      applyRange(1863, 1902);
     });
   }
 
   // Init
-  applyYear(1902);
+  applyRange(1863, 1902);
 }
 
 // ── Sidebar collapse ────────────────────────────────────────────────────────
@@ -684,7 +1006,7 @@ function setupKeyboard() {
         break;
       case 'Escape':
         if (isPlaying) { stopPlay(); }
-        else { closeInfoPanel(); deselectPin(selectedEntity); selectedEntity = null; }
+        else { deselectPin(selectedEntity); selectedEntity = null; closeInfoPanel(); }
         break;
       case ' ':
         e.preventDefault();
@@ -851,9 +1173,9 @@ function flyHome() {
     duration: 2,
     easingFunction: Cesium.EasingFunction.CUBIC_OUT
   });
-  closeInfoPanel();
   deselectPin(selectedEntity);
   selectedEntity = null;
+  closeInfoPanel();
 }
 
 // ── Tab switching ────────────────────────────────────────────────────────────

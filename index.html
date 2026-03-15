@@ -18,16 +18,16 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg-dark:    #070714;
-      --bg-panel:   #0d0d22;
-      --bg-card:    #12122a;
-      --bg-hover:   #1a1a35;
-      --border:     rgba(240,192,64,0.15);
+      --bg-dark:    #150d06;
+      --bg-panel:   #1d1209;
+      --bg-card:    #24160a;
+      --bg-hover:   #2d1c0f;
+      --border:     rgba(220,150,55,0.20);
       --gold:       #f0c040;
       --gold-dim:   rgba(240,192,64,0.6);
-      --text-main:  #e8e4d8;
-      --text-dim:   #9090a0;
-      --text-muted: #606078;
+      --text-main:  #f2e8d5;
+      --text-dim:   #a8906a;
+      --text-muted: #6e5438;
       --panel-w:    340px;
       --header-h:   64px;
       --timeline-h: 54px;
@@ -56,7 +56,7 @@
       height: var(--header-h); flex-shrink: 0;
       display: flex; align-items: center; gap: 12px;
       padding: 0 16px;
-      background: linear-gradient(90deg, #0a0a1e 0%, #0f0f28 100%);
+      background: linear-gradient(90deg, #1a0e07 0%, #221408 100%);
       border-bottom: 1px solid var(--border);
       z-index: 100; position: relative;
     }
@@ -138,6 +138,18 @@
     .phase-desc-years { font-size: 10px; color: var(--text-muted); margin-left: auto; }
     .phase-desc-text  { font-size: 11px; color: var(--text-dim); line-height: 1.6; }
 
+    /* ── Countries tab ── */
+    #tab-countries { padding: 16px; overflow-y: auto; gap: 6px; flex-direction: column; }
+    .country-list-title { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; }
+    #country-list { display: flex; flex-direction: column; gap: 5px; }
+    .country-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; border: 1px solid transparent; background: var(--bg-card); cursor: pointer; transition: all var(--transition); opacity: 0.4; }
+    .country-item.active { opacity: 1; border-color: var(--border); }
+    .country-item:hover { background: var(--bg-hover); }
+    .country-item.all-countries { border-color: rgba(240,192,64,0.3); }
+    .country-flag { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+    .country-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--text-main); }
+    .country-count { font-size: 10px; color: var(--text-muted); flex-shrink: 0; background: var(--bg-dark); padding: 2px 7px; border-radius: 10px; }
+
     /* ── Locations tab ── */
     #tab-locations { display: flex; flex-direction: column; }
     .search-wrap { padding: 12px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
@@ -178,7 +190,7 @@
 
     .info-panel-header {
       padding: 18px 20px 14px;
-      background: linear-gradient(135deg, #0f0f28 0%, #151530 100%);
+      background: linear-gradient(135deg, #1e1108 0%, #281708 100%);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
@@ -195,7 +207,7 @@
     .info-panel-content { padding: 16px 20px; }
 
     /* Location image */
-    .info-image-wrap { position: relative; width: 100%; overflow: hidden; background: #0a0a1e; flex-shrink: 0; }
+    .info-image-wrap { position: relative; width: 100%; overflow: hidden; background: #150d06; flex-shrink: 0; }
     .info-image { display: block; width: 100%; height: 180px; object-fit: cover; object-position: center; }
     .info-image-caption { position: absolute; bottom: 0; left: 0; right: 0; padding: 6px 10px; font-size: 9px; color: rgba(255,255,255,0.55); background: linear-gradient(transparent, rgba(0,0,0,0.65)); letter-spacing: 0.04em; }
 
@@ -204,8 +216,8 @@
     .info-sig { font-family: 'Lora', serif; font-size: 13px; font-style: italic; color: var(--gold); line-height: 1.4; }
 
     /* Location-specific quote */
-    .info-quote-wrap { background: rgba(46,204,113,0.05); border: 1px solid rgba(46,204,113,0.18); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
-    .info-quote-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; color: rgba(46,204,113,0.7); text-transform: uppercase; margin-bottom: 6px; }
+    .info-quote-wrap { background: rgba(220,150,55,0.07); border: 1px solid rgba(220,150,55,0.22); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+    .info-quote-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; color: rgba(220,150,55,0.75); text-transform: uppercase; margin-bottom: 6px; }
     .info-quote-text { font-family: 'Lora', serif; font-size: 12px; font-style: italic; color: var(--text-dim); line-height: 1.6; }
     .info-quote-text::before { content: '\201C'; }
     .info-quote-text::after  { content: '\201D'; }
@@ -241,59 +253,62 @@
     /* ─── Floating quote ──────────────────────────────────── */
     /* ─── Zoom Control ───────────────────────────────────── */
     #zoom-control {
-      position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-      transition: right 0.35s ease;
-      z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 6px;
-      background: rgba(10,10,26,0.84); backdrop-filter: blur(12px);
-      border: 1px solid rgba(240,192,64,0.25); border-radius: 14px;
-      padding: 10px 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.55); user-select: none;
+      display: flex; flex-direction: row; align-items: center; gap: 6px;
+      flex-shrink: 0; padding-left: 14px;
+      border-left: 1px solid var(--border); user-select: none;
     }
-    .zoom-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: rgba(240,192,64,0.10); border: 1px solid rgba(240,192,64,0.30); border-radius: 7px; color: var(--gold); font-size: 20px; font-weight: 300; line-height: 1; cursor: pointer; flex-shrink: 0; transition: background 0.2s, border-color 0.2s; }
+    .zoom-btn { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: rgba(240,192,64,0.10); border: 1px solid rgba(240,192,64,0.30); border-radius: 7px; color: var(--gold); font-size: 20px; font-weight: 300; line-height: 1; cursor: pointer; flex-shrink: 0; transition: background 0.2s, border-color 0.2s; }
     .zoom-btn:hover  { background: rgba(240,192,64,0.22); border-color: rgba(240,192,64,0.6); }
     .zoom-btn:active { background: rgba(240,192,64,0.32); }
-    .zoom-track-wrap { position: relative; width: 28px; height: 130px; display: flex; align-items: center; justify-content: center; }
-    #zoom-slider { position: absolute; width: 126px; height: 4px; margin: 0; transform: rotate(-90deg); cursor: pointer; appearance: none; -webkit-appearance: none; background: transparent; outline: none; }
+    .zoom-track-wrap { width: 120px; height: 20px; display: flex; align-items: center; }
+    #zoom-slider { width: 100%; height: 4px; margin: 0; cursor: pointer; appearance: none; -webkit-appearance: none; background: transparent; outline: none; }
     #zoom-slider::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right, var(--gold) calc(var(--val, 30) * 1%), rgba(240,192,64,0.18) calc(var(--val, 30) * 1%)); border-radius: 2px; }
     #zoom-slider::-moz-range-track { height: 3px; background: rgba(240,192,64,0.18); border-radius: 2px; }
     #zoom-slider::-moz-range-progress { height: 3px; background: var(--gold); border-radius: 2px; }
-    #zoom-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--gold); margin-top: -6.5px; border: 2px solid rgba(7,7,20,0.7); box-shadow: 0 0 8px rgba(240,192,64,0.55); transition: transform 0.15s, box-shadow 0.15s; }
+    #zoom-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); margin-top: -5.5px; border: 2px solid #150d06; box-shadow: 0 0 8px rgba(240,192,64,0.55); transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; }
     #zoom-slider::-webkit-slider-thumb:hover { transform: scale(1.25); box-shadow: 0 0 14px rgba(240,192,64,0.75); }
-    #zoom-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--gold); border: 2px solid rgba(7,7,20,0.7); box-shadow: 0 0 8px rgba(240,192,64,0.55); }
-    #zoom-label { font-size: 9px; color: var(--text-muted); letter-spacing: 0.06em; text-align: center; min-width: 36px; margin-top: 2px; }
-    /* Shift zoom control left when info panel is open so it stays visible */
-    #info-panel.open ~ #zoom-control { right: 376px; }
+    #zoom-slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--gold); border: 2px solid #150d06; box-shadow: 0 0 8px rgba(240,192,64,0.55); }
+    #zoom-label { font-size: 9px; color: var(--text-muted); letter-spacing: 0.06em; min-width: 40px; text-align: right; flex-shrink: 0; }
 
     /* ─── Timeline Bar ───────────────────────────────────── */
     #timeline-bar {
       height: var(--timeline-h); flex-shrink: 0;
-      background: linear-gradient(90deg, #090918 0%, #0d0d24 100%);
+      background: linear-gradient(90deg, #140b05 0%, #1c1108 100%);
       border-top: 1px solid var(--border);
       display: flex; align-items: center; gap: 10px;
       padding: 0 16px; z-index: 30;
     }
     .tl-end-label { font-size: 11px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; font-family: 'Cinzel', serif; }
-    .tl-track-wrap { flex: 1; position: relative; height: 24px; display: flex; align-items: center; }
-    #year-slider {
-      width: 100%; appearance: none; -webkit-appearance: none;
-      height: 4px; background: transparent; outline: none; cursor: pointer; position: relative; z-index: 2;
+    .tl-track-wrap { flex: 1; position: relative; height: 28px; display: flex; align-items: center; }
+    /* Static background track */
+    .tl-track-bg { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); height: 4px; background: rgba(240,192,64,0.15); border-radius: 2px; z-index: 0; }
+    /* Gold fill between the two thumbs */
+    #tl-range-fill { position: absolute; top: 50%; transform: translateY(-50%); height: 4px; background: var(--gold); border-radius: 2px; pointer-events: none; z-index: 1; left: 0%; width: 100%; }
+    /* Phase tick marks */
+    #tl-ticks { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); height: 14px; pointer-events: none; z-index: 2; }
+    .tl-tick { position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 1px; transform: translateX(-50%); opacity: 0.55; }
+    /* Dual range inputs — stacked on top of each other */
+    .tl-range-input {
+      position: absolute; left: 0; width: 100%;
+      appearance: none; -webkit-appearance: none;
+      background: transparent; outline: none;
+      height: 4px; pointer-events: none; z-index: 3;
     }
-    #year-slider::-webkit-slider-runnable-track {
-      height: 4px;
-      background: linear-gradient(
-        to right,
-        var(--gold) calc(var(--tl-val, 100) * 1%),
-        rgba(240,192,64,0.15) calc(var(--tl-val, 100) * 1%)
-      );
-      border-radius: 2px;
+    .tl-range-input::-webkit-slider-runnable-track { background: transparent; height: 4px; }
+    .tl-range-input::-moz-range-track   { background: transparent; height: 4px; border: none; }
+    .tl-range-input::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--gold); margin-top: -7px;
+      border: 2px solid #150d06; box-shadow: 0 0 10px rgba(240,192,64,0.6);
+      cursor: pointer; pointer-events: all;
     }
-    #year-slider::-moz-range-track { height: 4px; background: rgba(240,192,64,0.15); border-radius: 2px; }
-    #year-slider::-moz-range-progress { height: 4px; background: var(--gold); border-radius: 2px; }
-    #year-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--gold); margin-top: -7px; border: 2px solid #070714; box-shadow: 0 0 10px rgba(240,192,64,0.6); cursor: pointer; }
-    #year-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--gold); border: 2px solid #070714; box-shadow: 0 0 10px rgba(240,192,64,0.6); }
-    /* Phase tick marks on the timeline track */
-    #tl-ticks { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); height: 14px; pointer-events: none; }
-    .tl-tick { position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 1px; transform: translateX(-50%); opacity: 0.7; }
-    #year-display { font-size: 12px; font-weight: 600; color: var(--gold); letter-spacing: 0.05em; min-width: 90px; text-align: center; flex-shrink: 0; }
+    .tl-range-input::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--gold); border: 2px solid #150d06;
+      box-shadow: 0 0 10px rgba(240,192,64,0.6);
+      cursor: pointer; pointer-events: all;
+    }
+    #year-display { font-size: 12px; font-weight: 600; color: var(--gold); letter-spacing: 0.05em; min-width: 110px; text-align: center; flex-shrink: 0; }
     #tl-reset-btn {
       background: rgba(240,192,64,0.1); border: 1px solid var(--border);
       color: var(--text-dim); padding: 5px 10px; border-radius: 5px;
@@ -310,16 +325,16 @@
     @media (max-width: 900px) {
       :root { --panel-w: 280px; }
       #info-panel { width: 300px; }
-      #info-panel.open ~ #zoom-control { right: 316px; }
       .header-stats { display: none; }
     }
     @media (max-width: 600px) {
       #sidebar { width: 0; }
       #info-panel { width: 100%; }
-      /* On very small screens hide zoom when panel is open (no room) */
-      #info-panel.open ~ #zoom-control { display: none; }
       .header-title { font-size: 13px; }
       .tl-end-label { display: none; }
+      /* Shrink zoom track on small screens */
+      .zoom-track-wrap { width: 70px; }
+      #zoom-label { display: none; }
     }
   </style>
 </head>
@@ -347,7 +362,7 @@
     </div>
     <div class="header-stats">
       <div class="stat-item"><span class="stat-num" id="stat-locs">—</span><span>Locations</span></div>
-      <div class="stat-item"><span class="stat-num">12</span><span>Countries</span></div>
+      <div class="stat-item"><span class="stat-num" id="stat-countries">—</span><span>Countries</span></div>
       <div class="stat-item"><span class="stat-num">5</span><span>Phases</span></div>
     </div>
     <button id="play-btn" class="header-btn" onclick="startPlay()" title="Auto-fly through all locations in order (Space)">▶ Play Journey</button>
@@ -362,6 +377,7 @@
       <div class="tab-bar">
         <button class="tab-btn active" data-tab="phases"    onclick="switchTab('phases')">PHASES</button>
         <button class="tab-btn"        data-tab="locations" onclick="switchTab('locations')">LOCATIONS</button>
+        <button class="tab-btn"        data-tab="countries" onclick="switchTab('countries')">COUNTRIES</button>
       </div>
 
       <!-- Phases tab -->
@@ -369,6 +385,12 @@
         <div class="phase-legend-title">Filter by Phase</div>
         <div id="phase-legend"><!-- built by JS --></div>
         <div class="phase-descriptions" id="phase-desc-container"><!-- built by JS --></div>
+      </div>
+
+      <!-- Countries tab -->
+      <div class="tab-panel" id="tab-countries">
+        <div class="country-list-title">Filter by Country</div>
+        <div id="country-list"><!-- built by JS --></div>
       </div>
 
       <!-- Locations tab -->
@@ -441,7 +463,24 @@
       </div>
     </div>
 
-    <!-- Zoom control -->
+  </div><!-- /main-row -->
+
+  <!-- Timeline bar — spans full width, below globe -->
+  <div id="timeline-bar">
+    <span class="tl-end-label">1863</span>
+    <div class="tl-track-wrap">
+      <div class="tl-track-bg"></div>
+      <div id="tl-range-fill"></div>
+      <div id="tl-ticks"></div>
+      <input type="range" class="tl-range-input" id="year-slider-start" min="1863" max="1902" value="1863" />
+      <input type="range" class="tl-range-input" id="year-slider-end"   min="1863" max="1902" value="1902" />
+    </div>
+    <span class="tl-end-label">1902</span>
+    <span id="year-display">All Years</span>
+    <button id="tl-reset-btn">Show All</button>
+    <span class="tl-hint">← → navigate &nbsp;·&nbsp; Space play &nbsp;·&nbsp; Esc close</span>
+
+    <!-- Zoom control — horizontal, inline in timeline bar -->
     <div id="zoom-control">
       <button id="zoom-in-btn"  class="zoom-btn" title="Zoom in">+</button>
       <div class="zoom-track-wrap">
@@ -450,26 +489,12 @@
       <button id="zoom-out-btn" class="zoom-btn" title="Zoom out">−</button>
       <div id="zoom-label">—</div>
     </div>
-
-
-  </div><!-- /main-row -->
-
-  <!-- Timeline bar — spans full width, below globe -->
-  <div id="timeline-bar">
-    <span class="tl-end-label">1863</span>
-    <div class="tl-track-wrap">
-      <div id="tl-ticks"></div>
-      <input type="range" id="year-slider" min="1863" max="1902" value="1902" />
-    </div>
-    <span class="tl-end-label">1902</span>
-    <span id="year-display">All Years</span>
-    <button id="tl-reset-btn">Show All</button>
-    <span class="tl-hint">← → navigate &nbsp;·&nbsp; Space play &nbsp;·&nbsp; Esc close</span>
   </div>
 
 </div><!-- /app -->
 
 <script src="data/data.js"></script>
+<script src="data/phase_images.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
