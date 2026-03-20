@@ -110,7 +110,7 @@ window.LOCATIONS_DATA = [
   {
     "id": "ghusuree",
     "phase": "p1",
-    "name": "Ghusuree Villa",
+    "name": "Ghusuree Village",
     "place": "Ghusuree",
     "city": "Bally, Howrah",
     "country": "India",

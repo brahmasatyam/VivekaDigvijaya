@@ -228,11 +228,6 @@
     .info-desc-para:last-child { margin-bottom: 0; }
     .info-rich-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; background: rgba(240,192,64,0.12); border: 1px solid rgba(240,192,64,0.3); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--gold-dim); text-transform: uppercase; margin-bottom: 10px; margin-left: 6px; vertical-align: middle; }
 
-    /* Wikipedia link */
-    .info-wiki-wrap { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
-    .info-wiki-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); text-decoration: none; transition: color var(--transition); }
-    .info-wiki-link:hover { color: var(--gold); }
-    .info-wiki-link::before { content: '📖'; font-size: 14px; }
 
     /* Info panel footer — Prev / Counter / Next */
     .info-panel-footer {
@@ -433,12 +428,6 @@
           <div id="info-sig" class="info-sig"></div>
         </div>
 
-        <!-- Phase quote -->
-        <div class="info-quote-wrap">
-          <div class="info-quote-label">Words of Vivekananda</div>
-          <div id="info-quote-text" class="info-quote-text"></div>
-        </div>
-
         <!-- Historical account -->
         <div class="info-desc-label">
           Historical Account
@@ -446,12 +435,6 @@
         </div>
         <div id="info-desc" class="info-desc"></div>
 
-        <!-- Wikipedia link -->
-        <div class="info-wiki-wrap">
-          <a id="info-wiki-link" class="info-wiki-link" href="#" target="_blank" rel="noopener noreferrer">
-            Read more on Wikipedia
-          </a>
-        </div>
         </div><!-- /info-panel-content -->
       </div><!-- /info-panel-body -->
 
@@ -482,11 +465,11 @@
 
     <!-- Zoom control — horizontal, inline in timeline bar -->
     <div id="zoom-control">
-      <button id="zoom-in-btn"  class="zoom-btn" title="Zoom in">+</button>
+      <button id="zoom-out-btn" class="zoom-btn" title="Zoom out">−</button>
       <div class="zoom-track-wrap">
         <input type="range" id="zoom-slider" min="0" max="100" value="30" />
       </div>
-      <button id="zoom-out-btn" class="zoom-btn" title="Zoom out">−</button>
+      <button id="zoom-in-btn"  class="zoom-btn" title="Zoom in">+</button>
       <div id="zoom-label">—</div>
     </div>
   </div>

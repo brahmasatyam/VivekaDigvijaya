@@ -15,6 +15,9 @@ let activeCountries = new Set();  // which countries are visible
 let routePolylines = {};       // phase-id → polyline entity
 let selectedEntity = null;
 let currentLocIndex = -1;      // index in LOCATIONS of the selected location
+let rippleEntity   = null;     // animated ripple ring for selected pin
+const RIPPLE_PERIOD = 1800;    // ms — one full ring expansion cycle
+const RIPPLE_RADIUS = 90000;   // metres — max ring radius
 let isPlaying = false;
 let playTimer = null;
 let timelineYearStart = 1863;  // range slider — start year
@@ -703,11 +706,12 @@ function selectPin(entity) {
   if (!entity) return;
   const loc = entity._locData;
   const big = loc && loc.significance && loc.significance.includes('—');
-  // Swap to gold-border variant of the same pin — keeps the photo, adds highlight
+  // Swap to gold-border variant of the same pin
   entity.billboard.image = big
     ? (pinImages[loc.phase + '_ks_sel'] || pinImages[loc.phase + '_sel'] || pinImages[loc.phase + '_ks'])
     : (pinImages[loc.phase + '_sel']    || pinImages[loc.phase]);
-  entity.billboard.scale = 1.25;
+  // Start ripple + scale-pulse animation
+  startPinAnimation(entity);
 }
 
 function deselectPin(entity) {
@@ -718,7 +722,60 @@ function deselectPin(entity) {
   entity.billboard.image = big
     ? (pinImages[loc.phase + '_ks'] || pinImages[loc.phase])
     : (pinImages[loc.phase]          || pinImages[PHASES[0].id]);
-  entity.billboard.scale = 1.0;
+  stopPinAnimation(entity);
+}
+
+// ── Pin animation (ripple ring + scale pulse) ───────────────────────────────
+function startPinAnimation(entity) {
+  stopPinAnimation();           // clear any previous animation
+  if (!entity || !entity._locData) return;
+  const loc = entity._locData;
+  const t0  = Date.now();
+
+  // Scale pulse — billboard gently breathes between 1.20 and 1.45
+  entity.billboard.scale = new Cesium.CallbackProperty(() => {
+    const t = Date.now() / 1000;
+    return 1.325 + 0.125 * Math.sin(t * Math.PI * 2.2);
+  }, false);
+
+  // Ripple ring — gold ellipse that expands and fades, then repeats
+  rippleEntity = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(loc.lng, loc.lat, 0),
+    ellipse: {
+      semiMajorAxis: new Cesium.CallbackProperty(() => {
+        const frac = ((Date.now() - t0) % RIPPLE_PERIOD) / RIPPLE_PERIOD;
+        return Math.max(1, frac * RIPPLE_RADIUS);
+      }, false),
+      semiMinorAxis: new Cesium.CallbackProperty(() => {
+        const frac = ((Date.now() - t0) % RIPPLE_PERIOD) / RIPPLE_PERIOD;
+        return Math.max(1, frac * RIPPLE_RADIUS);
+      }, false),
+      material: new Cesium.ColorMaterialProperty(
+        new Cesium.CallbackProperty(() => {
+          const frac = ((Date.now() - t0) % RIPPLE_PERIOD) / RIPPLE_PERIOD;
+          // Ease-out fade: bright at start, trails off at edge
+          const alpha = Math.pow(1 - frac, 1.6) * 0.60;
+          return Cesium.Color.GOLD.withAlpha(alpha);
+        }, false)
+      ),
+      outline: false,
+      height: 0,
+      classificationType: Cesium.ClassificationType.TERRAIN,
+    }
+  });
+}
+
+function stopPinAnimation(entity) {
+  // Reset scale on the entity that is being deselected
+  const ent = entity || selectedEntity;
+  if (ent && ent.billboard) {
+    ent.billboard.scale = 1.0;
+  }
+  // Remove ripple entity from globe
+  if (rippleEntity && viewer) {
+    viewer.entities.remove(rippleEntity);
+    rippleEntity = null;
+  }
 }
 
 // ── Visibility ──────────────────────────────────────────────────────────────
@@ -758,10 +815,6 @@ function showInfoPanel(loc) {
   // Significance
   document.getElementById('info-sig').textContent = loc.significance || '';
 
-  // Quote — random quote from this phase
-  const quoteEl = document.getElementById('info-quote-text');
-  if (quoteEl) quoteEl.textContent = getPhaseQuote(loc.phase);
-
   // Rich description
   const descEl = document.getElementById('info-desc');
   const badgeEl = document.getElementById('info-rich-badge');
@@ -774,12 +827,6 @@ function showInfoPanel(loc) {
   } else {
     descEl.textContent = loc.desc || '';
     if (badgeEl) badgeEl.style.display = 'none';
-  }
-
-  // Wikipedia link
-  const wikiLink = document.getElementById('info-wiki-link');
-  if (wikiLink) {
-    wikiLink.href = wikiSearchUrl(loc);
   }
 
   // Location image
