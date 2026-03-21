@@ -1,5 +1,5 @@
 // ─── Vivekananda Travels — Cesium App ──────────────────────────────────────
-// Loads phases.json + locations.json + pin_content.json and renders an interactive 3D globe.
+// Data is loaded from data/data.js (embedded window globals — works with file:// protocol).
 
 'use strict';
 
@@ -112,28 +112,17 @@ function getFilteredLocations() {
 }
 
 // ── Data loading ────────────────────────────────────────────────────────────
-async function loadData() {
-  if (window.PHASES_DATA && window.LOCATIONS_DATA) {
-    PHASES = window.PHASES_DATA;
-    LOCATIONS = window.LOCATIONS_DATA;
-    if (window.PIN_CONTENT_DATA) {
-      window.PIN_CONTENT_DATA.forEach(p => { PIN_CONTENT[p.id] = p; });
-    }
-    return;
+function loadData() {
+  PHASES    = window.PHASES_DATA    || [];
+  LOCATIONS = window.LOCATIONS_DATA || [];
+  if (window.PIN_CONTENT_DATA) {
+    window.PIN_CONTENT_DATA.forEach(p => { PIN_CONTENT[p.id] = p; });
   }
-  const [phData, locData, pcData] = await Promise.all([
-    fetch('data/phases.json').then(r => r.json()),
-    fetch('data/locations.json').then(r => r.json()),
-    fetch('data/pin_content.json').then(r => r.json()).catch(() => [])
-  ]);
-  PHASES = phData;
-  LOCATIONS = locData;
-  pcData.forEach(p => { PIN_CONTENT[p.id] = p; });
 }
 
 async function init() {
   try {
-    await loadData();
+    loadData();
     buildLegend();
     buildCountryList();
     await initCesium();
@@ -579,6 +568,19 @@ async function initCesium() {
 
   // ── Lighting ─────────────────────────────────────────────────────────────
   viewer.scene.globe.enableLighting = false;
+
+  // ── Evening sky with stars ────────────────────────────────────────────────
+  // Fix clock to evening time so the sun sits near the horizon
+  viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date('2024-03-21T17:45:00Z'));
+  viewer.clock.shouldAnimate = false;
+
+  // Warm sunset atmosphere: slight orange-red hue, vivid, a touch darker
+  viewer.scene.skyAtmosphere.hueShift        = -0.05;   // push toward orange/red
+  viewer.scene.skyAtmosphere.saturationShift =  0.20;   // richer, more vivid colours
+  viewer.scene.skyAtmosphere.brightnessShift = -0.10;   // darken slightly for dusk
+
+  // Make the sun disc visible
+  viewer.scene.sun.show = true;
 
   // ── Camera ────────────────────────────────────────────────────────────────
   viewer.camera.flyTo({
